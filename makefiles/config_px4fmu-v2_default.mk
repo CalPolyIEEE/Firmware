@@ -10,6 +10,11 @@ ROMFS_ROOT	 = $(PX4_BASE)/ROMFS/px4fmu_common
 ROMFS_OPTIONAL_FILES = $(PX4_BASE)/Images/px4io-v2_default.bin
 
 #
+# Custom modules
+#
+MODULES		+= modules/cpuav_app
+
+#
 # Board support modules
 #
 MODULES		+= drivers/device
