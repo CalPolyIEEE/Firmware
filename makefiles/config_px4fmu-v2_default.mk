@@ -13,6 +13,7 @@ ROMFS_OPTIONAL_FILES = $(PX4_BASE)/Images/px4io-v2_default.bin
 # Custom modules
 #
 MODULES		+= modules/cpuav_app
+MODULES     += modules/ex_hwtest
 
 #
 # Board support modules
