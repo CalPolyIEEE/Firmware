@@ -107,17 +107,18 @@ then
 
 	#
 	# Set default values
+   # Go to https://pixhawk.org/dev/system_startup for parameter information
 	#
 	set HIL no
-	set VEHICLE_TYPE none
-	set MIXER none
+	set VEHICLE_TYPE mc
+	set MIXER FMU_quad_x
 	set MIXER_AUX none
-	set OUTPUT_MODE none
-	set PWM_OUT none
-	set PWM_RATE none
-	set PWM_DISARMED none
-	set PWM_MIN none
-	set PWM_MAX none
+	set OUTPUT_MODE fmu
+	set PWM_OUT 1234
+	set PWM_RATE 400
+	set PWM_DISARMED 0
+	set PWM_MIN 1000
+	set PWM_MAX 2000
 	set PWM_AUX_OUT none
 	set PWM_AUX_RATE none
 	set PWM_AUX_DISARMED none
