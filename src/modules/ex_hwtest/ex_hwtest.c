@@ -20,45 +20,79 @@ int ex_hwtest_main(int argc, char *argv[]) {
    bool test_pwm = false;
    bool test_att = false;
 
-   for (int i = 1; i < argc; i++) {
-      if(strcmp(argv[i], "--pwm") == 0 || strcmp(argv[i], "--actuator") == 0) {
+   // Check arguments for syntax
+   if(argc == 2) {
+      if(strcmp(argv[1], "--pwm") == 0 
+       || strcmp(argv[1], "--actuator") == 0) {
          test_pwm = true;
       }
-      if(strcmp(argv[i], "--att") == 0 || strcmp(argv[i], "--attitude") == 0) {
+      else if(strcmp(argv[1], "--att") == 0 
+       || strcmp(argv[1], "--attitude") == 0) {
          test_att = true;
       }
+      else {
+         warnx("Usage: ex_hwtest --<argument>");
+         warnx("\t--pwm (test motor control)");
+         warnx("\t--att (test attitude sensors)");
+         return 0;
+      }
+   }
+   else {
+      warnx("Usage: ex_hwtest --<argument>");
+      warnx("\t--pwm (test motor control)");
+      warnx("\t--att (test attitude sensors)");
+      return 0;
    }
 
+   // Test the PWM output to the motors
    if(test_pwm) {
+      warnx("Remember to stop commander!");
+      warnx("\t<commander stop>");
+      warnx("Remember to link the mixer!");
+      warnx("\t<mixer load /dev/pwm_output0 /etc/mixers/quad_x.main.mix>");
 
+      // Initialize the struct for passing control information to the motors
       struct actuator_controls_s actuators;
       memset(&actuators, 0, sizeof(actuators));
-      orb_advert_t actuator_pub_fd = orb_advertise(ORB_ID(actuator_controls_0), &actuators);
+
+      // Indicate that we'll be publishing control information for the motors
+      orb_advert_t actuator_pub_fd = 
+       orb_advertise(ORB_ID(actuator_controls_0), &actuators);
    
+      // Initialize the struct for passing arming information
       struct actuator_armed_s arm;
       memset(&arm, 0, sizeof(arm));
 
+      // Indicate that we'll be publishing arming information for the motors
+      orb_advert_t arm_pub_fd = orb_advertise(ORB_ID(actuator_armed), &arm);
+
+      // Arm the motors
       arm.timestamp = hrt_absolute_time();
       arm.ready_to_arm = true;
       arm.armed = true;
-      orb_advert_t arm_pub_fd = orb_advertise(ORB_ID(actuator_armed), &arm);
+
+      // Publish the arming information, indicating new data is available
       orb_publish(ORB_ID(actuator_armed), arm_pub_fd, &arm);
 
+      // Subscribe to the information we just subscribed to verify it
       int arm_sub_fd = orb_subscribe(ORB_ID(actuator_armed));
+
+      // Read the arming information in from uORB into our struct
       orb_copy(ORB_ID(actuator_armed), arm_sub_fd, &arm);
 
+      // Confirm arming of the motors
       if(arm.ready_to_arm && arm.armed) {
-         warnx("Actuator armed");
+         warnx("Actuators armed");
       }
       else {
          errx(1, "Arming actuators failed");
       }
 
       hrt_abstime stime;
-
       int count = 0;
 
-      while(true) {
+      // Incrementally increase output to the motors every 5 seconds
+      while(count <= 45) {
          stime = hrt_absolute_time();
 
          while(hrt_absolute_time() - stime < 1000000) {
@@ -78,13 +112,22 @@ int ex_hwtest_main(int argc, char *argv[]) {
                else if(count <= 25) {
                   actuators.control[i] = 0.0f;
                }
-               else if(count >= 31) {
-                  count = 0;
+               else if(count <= 30) {
+                  actuators.control[i] = 0.3f;
+               }
+               else if(count <= 35) {
+                  actuators.control[i] = 0.5f;
+               }
+               else if(count <= 40) {
+                  actuators.control[i] = 0.7f;
                }
             }
-         
+            
+            // Publish the control information
             actuators.timestamp = hrt_absolute_time();
             orb_publish(ORB_ID(actuator_controls_0), actuator_pub_fd, &actuators);
+            
+            // Pass control for 10ms
             usleep(10000);
          }
 
@@ -93,26 +136,41 @@ int ex_hwtest_main(int argc, char *argv[]) {
       }
    }
 
+   // Test reading from the attitude sensors
    else if(test_att) {
+
+      // Intialize the struct for reading attitude information
       struct vehicle_attitude_s att;
       memset(&att, 0, sizeof(att));
 
+      // Subscribe to the topic that publishes attitude information
       int att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
 
+      // Setup the loop that checks for new information
       struct pollfd fds[1] = {
          { .fd = att_sub, .events = POLLIN}
       };
 
-      while(true) {
+      hrt_abstime stime;
+
+      stime = hrt_absolute_time();
+
+      // Run for 30 seconds
+      while(hrt_absolute_time() - stime < 30000000) {
+
+         // Wait for sensor or parameter update.
          int ret = poll(fds, 1, 500);
 
+         // Error
          if(ret < 0) {
             warnx("poll error");
          }
+         // No new data, ignore
          else if(ret == 0) {
-            /* no op */
          }
+         // New data received
          else {
+            // Copy the sensor data into our struct
             if (fds[0].revents & POLLIN) {
                orb_copy(ORB_ID(vehicle_attitude), att_sub, &att);
 
