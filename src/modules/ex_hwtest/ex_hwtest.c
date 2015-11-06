@@ -28,7 +28,7 @@ int ex_hwtest_main(int argc, char *argv[]) {
    orb_copy(ORB_ID(actuator_armed), arm_sub_fd, &arm);
 
    if(arm.ready_to_arm && arm.armed) {
-      warnx("Actautor armed");
+      warnx("Actuator armed");
    }
    else {
       errx(1, "Arming actuators failed");
@@ -42,7 +42,7 @@ int ex_hwtest_main(int argc, char *argv[]) {
       stime = hrt_absolute_time();
 
       while(hrt_absolute_time() - stime < 1000000) {
-         for(int i = 0; i != 8; i++) {
+         for(int i = 4; i != 5; i++) {
             if(count <= 5) {
                actuators.control[i] = -1.0f;
             }

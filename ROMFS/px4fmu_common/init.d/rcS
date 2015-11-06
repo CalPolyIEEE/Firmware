@@ -26,7 +26,7 @@ set LOG_FILE /fs/microsd/bootlog.txt
 # REBOOTWORK this needs to start after the flight control loop
 if mount -t vfat /dev/mmcsd0 /fs/microsd
 then
-	echo "[i] microSD mounted: /fs/microsd"
+	echo "[i] microSD mounted: /fs/microsd" >> $LOG_FILE
 	# Start playing the startup tune
 	tone_alarm start
 else
@@ -35,9 +35,9 @@ else
 	then
 		if mount -t vfat /dev/mmcsd0 /fs/microsd
 		then
-			echo "[i] microSD card formatted"
+			echo "[i] microSD card formatted" >> $LOG_FILE
 		else
-			echo "[i] format failed"
+			echo "[i] format failed" >> $LOG_FILE
 			tone_alarm MNBG
 			set LOG_FILE /dev/null
 		fi
@@ -52,7 +52,7 @@ fi
 #
 if [ -f $FRC ]
 then
-	echo "[i] Executing script: $FRC"
+	echo "[i] Executing script: $FRC" >> $LOG_FILE
 	sh $FRC
 	set MODE custom
 fi
@@ -81,9 +81,9 @@ then
 	param select $PARAM_FILE
 	if param load
 	then
-		echo "[param] Loaded: $PARAM_FILE"
+		echo "[param] Loaded: $PARAM_FILE" >> $LOG_FILE
 	else
-		echo "[param] FAILED loading $PARAM_FILE"
+		echo "[param] FAILED loading $PARAM_FILE" >> $LOG_FILE
 		if param reset
 		then
 		fi
@@ -111,13 +111,13 @@ then
 	#
 	set HIL no
 	set VEHICLE_TYPE mc
-	set MIXER FMU_quad_x
+	set MIXER quad_x
 	set MIXER_AUX none
 	set OUTPUT_MODE fmu
 	set PWM_OUT 1234
 	set PWM_RATE 400
-	set PWM_DISARMED 0
-	set PWM_MIN 1000
+	set PWM_DISARMED 900
+	set PWM_MIN 1075
 	set PWM_MAX 2000
 	set PWM_AUX_OUT none
 	set PWM_AUX_RATE none
@@ -134,6 +134,10 @@ then
 	set GPS yes
 	set GPS_FAKE no
 	set FAILSAFE none
+
+   param set SYS_USE_IO yes
+   param set SYS_AUTOSTART 4001
+   param set SYS_AUTOCONFIG 1
 
 	#
 	# Set AUTOCNF flag to use it in AUTOSTART scripts
@@ -162,7 +166,7 @@ then
 	#
 	if param compare SYS_AUTOSTART 0
 	then
-		echo "[i] No autostart"
+		echo "[i] No autostart" >> $LOG_FILE
 	else
 		sh /etc/init.d/rc.autostart
 	fi
@@ -173,7 +177,7 @@ then
 	#
 	if [ -f $FCONFIG ]
 	then
-		echo "[i] Custom config: $FCONFIG"
+		echo "[i] Custom config: $FCONFIG" >> $LOG_FILE
 		sh $FCONFIG
 	fi
 	unset FCONFIG
@@ -268,7 +272,7 @@ then
 	then
 		# Need IO for output but it not present, disable output
 		set OUTPUT_MODE none
-		echo "[i] ERROR: PX4IO not found, disabling output"
+		echo "[i] ERROR: PX4IO not found, disabling output" >> $LOG_FILE
 
 		# Avoid using ttyS0 for MAVLink on FMUv1
 		if ver hwcmp PX4FMU_V1
@@ -337,9 +341,9 @@ then
 		then
 			if fmu mode_$FMU_MODE
 			then
-				echo "[i] FMU mode_$FMU_MODE started"
+				echo "[i] FMU mode_$FMU_MODE started" >> $LOG_FILE
 			else
-				echo "[i] ERROR: FMU mode_$FMU_MODE start failed"
+				echo "[i] ERROR: FMU mode_$FMU_MODE start failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
 			fi
 
@@ -399,10 +403,10 @@ then
 			then
 				if px4io start
 				then
-					echo "[i] PX4IO started"
+					echo "[i] PX4IO started" >> $LOG_FILE
 					sh /etc/init.d/rc.io
 				else
-					echo "[i] ERROR: PX4IO start failed"
+					echo "[i] ERROR: PX4IO start failed" >> $LOG_FILE
 					tone_alarm $TUNE_ERR
 				fi
 			fi
@@ -411,9 +415,9 @@ then
 			then
 				if fmu mode_$FMU_MODE
 				then
-					echo "[i] FMU mode_$FMU_MODE started"
+					echo "[i] FMU mode_$FMU_MODE started" >> $LOG_FILE
 				else
-					echo "[i] ERROR: FMU mode_$FMU_MODE start failed"
+					echo "[i] ERROR: FMU mode_$FMU_MODE start failed" >> $LOG_FILE
 					tone_alarm $TUNE_ERR
 				fi
 
@@ -533,11 +537,11 @@ then
 	#
 	if [ $VEHICLE_TYPE == mc ]
 	then
-		echo "[i] MULTICOPTER"
+		echo "[i] MULTICOPTER" >> $LOG_FILE
 
 		if [ $MIXER == none ]
 		then
-			echo "Mixer undefined"
+			echo "Mixer undefined" >> $LOG_FILE
 		fi
 
 		if [ $MAV_TYPE == none ]
@@ -576,7 +580,7 @@ then
 		# Still no MAV_TYPE found
 		if [ $MAV_TYPE == none ]
 		then
-			echo "Unknown MAV_TYPE"
+			echo "Unknown MAV_TYPE" >> $LOG_FILE
 		else
 			param set MAV_TYPE $MAV_TYPE
 		fi
@@ -666,7 +670,7 @@ then
 	#
 	if [ $VEHICLE_TYPE == none ]
 	then
-		echo "[i] No autostart ID found"
+		echo "[i] No autostart ID found" >> $LOG_FILE
 
 	fi
 
@@ -689,7 +693,7 @@ then
 	# Run no SD alarm last
 	if [ $LOG_FILE == /dev/null ]
 	then
-		echo "[i] No microSD card found"
+		echo "[i] No microSD card found" >> $LOG_FILE
 		# Play SOS
 		tone_alarm error
 	fi
