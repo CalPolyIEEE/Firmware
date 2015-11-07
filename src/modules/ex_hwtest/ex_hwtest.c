@@ -19,30 +19,44 @@ __EXPORT int ex_hwtest_main(int argc, char *argv[]);
 int ex_hwtest_main(int argc, char *argv[]) {
    bool test_pwm = false;
    bool test_att = false;
+   char test_att_flags = 0x00;
 
    // Check arguments for syntax
-   if(argc == 2) {
-      if(strcmp(argv[1], "--pwm") == 0 
-       || strcmp(argv[1], "--actuator") == 0) {
-         test_pwm = true;
-      }
-      else if(strcmp(argv[1], "--att") == 0 
-       || strcmp(argv[1], "--attitude") == 0) {
-         test_att = true;
-      }
-      else {
-         warnx("Usage: ex_hwtest --<argument>");
-         warnx("\t--pwm (test motor control)");
-         warnx("\t--att (test attitude sensors)");
-         return 0;
+   if(argc == 2 && strcmp(argv[1], "--att") == 0) {
+      test_att = true;
+   }
+   else if(argc > 2 && strcmp(argv[1], "--pwm") == 0) {
+      test_pwm = true;
+
+      for(int i = 2; i < argc; i++) {
+         for(unsigned int j = 0; j < strlen(argv[i]); j++) {
+            switch(argv[i][j]) {
+               case 'r':
+                  test_att_flags |= 0x01;
+                  break;
+               case 'p':
+                  test_att_flags |= 0x02;
+                  break;
+               case 'y':
+                  test_att_flags |= 0x04;
+                  break;
+               case 't':
+                  test_att_flags |= 0x08;
+                  break;
+               case '-':
+               default:
+                  break;
+            }
+         }
       }
    }
    else {
       warnx("Usage: ex_hwtest --<argument>");
-      warnx("\t--pwm (test motor control)");
+      warnx("\t--pwm -<r,p,y,t> (test motor control)");
       warnx("\t--att (test attitude sensors)");
       return 0;
    }
+
 
    // Test the PWM output to the motors
    if(test_pwm) {
@@ -89,38 +103,54 @@ int ex_hwtest_main(int argc, char *argv[]) {
       }
 
       hrt_abstime stime;
-      int count = 0;
+      unsigned int count = 0;
+      unsigned int test = 0;
+
+      switch(test_att_flags) {
+         case 1:
+            test = 0;
+            break;
+         case 2:
+            test = 1;
+            break;
+         case 4:
+            test = 2;
+            break;
+         case 8:
+            test = 3;
+            break;
+         default:
+            break;
+      }
 
       // Incrementally increase output to the motors every 5 seconds
       while(count <= 45) {
          stime = hrt_absolute_time();
 
          while(hrt_absolute_time() - stime < 1000000) {
-            for(int i = 4; i != 5; i++) {
-               if(count <= 5) {
-                  actuators.control[i] = -1.0f;
-               }
-               else if(count <= 10) {
-                  actuators.control[i] = -0.7f;
-               }
-               else if(count <= 15) {
-                  actuators.control[i] = -0.5f;
-               }
-               else if(count <= 20) {
-                  actuators.control[i] = -0.3f;
-               }
-               else if(count <= 25) {
-                  actuators.control[i] = 0.0f;
-               }
-               else if(count <= 30) {
-                  actuators.control[i] = 0.3f;
-               }
-               else if(count <= 35) {
-                  actuators.control[i] = 0.5f;
-               }
-               else if(count <= 40) {
-                  actuators.control[i] = 0.7f;
-               }
+            if(count <= 5) {
+               actuators.control[test] = -1.0f;
+            }
+            else if(count <= 10) {
+               actuators.control[test] = -0.7f;
+            }
+            else if(count <= 15) {
+               actuators.control[test] = -0.5f;
+            }
+            else if(count <= 20) {
+               actuators.control[test] = -0.3f;
+            }
+            else if(count <= 25) {
+               actuators.control[test] = 0.0f;
+            }
+            else if(count <= 30) {
+               actuators.control[test] = 0.3f;
+            }
+            else if(count <= 35) {
+               actuators.control[test] = 0.5f;
+            }
+            else if(count <= 40) {
+               actuators.control[test] = 0.7f;
             }
             
             // Publish the control information
