@@ -128,7 +128,9 @@ public:
 	enum MAVLINK_MODE {
 		MAVLINK_MODE_NORMAL = 0,
 		MAVLINK_MODE_CUSTOM,
-		MAVLINK_MODE_ONBOARD
+		MAVLINK_MODE_ONBOARD,
+		MAVLINK_MODE_OSD,
+		MAVLINK_MODE_CONFIG
 	};
 
 	void			set_mode(enum MAVLINK_MODE);
@@ -143,6 +145,14 @@ public:
 	bool			get_flow_control_enabled() { return _flow_control_enabled; }
 
 	bool			get_forwarding_on() { return _forwarding_on; }
+
+	/**
+	 * Set the boot complete flag on all instances
+	 *
+	 * Setting the flag unblocks parameter transmissions, which are gated
+	 * beforehand to ensure that the system is fully initialized.
+	 */
+	static void		set_boot_complete() { _boot_complete = true; }
 
 	/**
 	 * Get the free space in the transmit buffer
@@ -169,6 +179,23 @@ public:
 	 *			redundant.
 	 */
 	int			set_hil_enabled(bool hil_enabled);
+
+	/**
+	 * Set manual input generation mode
+	 *
+	 * Set to true to generate RC_INPUT messages on the system bus from
+	 * MAVLink messages.
+	 *
+	 * @param generation_enabled If set to true, generate RC_INPUT messages
+	 */
+	void			set_manual_input_mode_generation(bool generation_enabled) { _generate_rc = generation_enabled; }
+
+	/**
+	 * Get the manual input generation mode
+	 *
+	 * @return true if manual inputs should generate RC data
+	 */
+	bool			get_manual_input_mode_generation() { return _generate_rc; }
 
 	void			send_message(const uint8_t msgid, const void *msg, uint8_t component_ID = 0);
 
@@ -229,6 +256,7 @@ public:
 	 * @param severity the log level
 	 */
 	void			send_statustext(unsigned char severity, const char *string);
+	void 			send_autopilot_capabilites();
 
 	MavlinkStream *		get_streams() const { return _streams; }
 
@@ -275,6 +303,8 @@ public:
 
 	unsigned		get_system_type() { return _system_type; }
 
+	static bool		boot_complete() { return _boot_complete; }
+
 protected:
 	Mavlink			*next;
 
@@ -283,9 +313,11 @@ private:
 
 	int			_mavlink_fd;
 	bool			_task_running;
+	static bool		_boot_complete;
 
 	/* states */
 	bool			_hil_enabled;		/**< Hardware In the Loop mode */
+	bool			_generate_rc;		/**< Generate RC messages from manual input MAVLink messages */
 	bool			_use_hil_gps;		/**< Accept GPS HIL messages (for example from an external motion capturing system to fake indoor gps) */
 	bool			_forward_externalsp;	/**< Forward external setpoint messages to controllers directly if in offboard mode */
 	bool			_is_usb_uart;		/**< Port is USB */
@@ -304,6 +336,7 @@ private:
 	MAVLINK_MODE 		_mode;
 
 	mavlink_channel_t	_channel;
+	int32_t			_radio_id;
 
 	struct mavlink_logbuffer _logbuffer;
 	unsigned int		_total_counter;
@@ -319,6 +352,7 @@ private:
 	int			_datarate;		///< data rate for normal streams (attitude, position, etc.)
 	int			_datarate_events;	///< data rate for params, waypoints, text messages
 	float			_rate_mult;
+	hrt_abstime		_last_hw_rate_timestamp;
 
 	/**
 	 * If the queue index is not at 0, the queue sending
@@ -361,6 +395,7 @@ private:
 	bool			_param_initialized;
 	param_t			_param_system_id;
 	param_t			_param_component_id;
+	param_t			_param_radio_id;
 	param_t			_param_system_type;
 	param_t			_param_use_hil_gps;
 	param_t			_param_forward_externalsp;
@@ -375,6 +410,10 @@ private:
 	int			mavlink_open_uart(int baudrate, const char *uart_name, struct termios *uart_config_original, bool *is_usb);
 
 	static unsigned int	interval_from_rate(float rate);
+
+	static constexpr unsigned RADIO_BUFFER_CRITICAL_LOW_PERCENTAGE = 25;
+	static constexpr unsigned RADIO_BUFFER_LOW_PERCENTAGE = 35;
+	static constexpr unsigned RADIO_BUFFER_HALF_PERCENTAGE = 50;
 
 	int configure_stream(const char *stream_name, const float rate);
 

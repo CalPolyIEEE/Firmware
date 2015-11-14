@@ -37,6 +37,7 @@ MODULES		+= drivers/ets_airspeed
 MODULES		+= drivers/meas_airspeed
 MODULES		+= drivers/frsky_telemetry
 MODULES		+= modules/sensors
+MODULES		+= drivers/px4flow
 
 #
 # System commands
@@ -67,11 +68,10 @@ MODULES 	+= modules/land_detector
 # Estimation modules (EKF / other filters)
 #
 # Too high RAM usage due to static allocations
-# MODULES		+= modules/attitude_estimator_ekf
+#MODULES		+= modules/attitude_estimator_ekf
 MODULES		+= modules/ekf_att_pos_estimator
-# Since attitude_estimator_ekf is disabled, this app won't be
-# worthwhile on its own
-# MODULES		+= modules/position_estimator_inav
+MODULES		+= modules/attitude_estimator_q
+MODULES		+= modules/position_estimator_inav
 
 #
 # Vehicle Control

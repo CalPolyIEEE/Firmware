@@ -129,7 +129,7 @@
 #endif
 
 #define BATT_V_LOWPASS			0.001f
-#define BATT_V_IGNORE_THRESHOLD		4.8f
+#define BATT_V_IGNORE_THRESHOLD		2.5f
 
 /**
  * HACK - true temperature is much less than indicated temperature in baro,
@@ -634,6 +634,12 @@ Sensors::Sensors() :
 	(void)param_find("CAL_MAG2_ROT");
 	(void)param_find("SYS_PARAM_VER");
 	(void)param_find("SYS_AUTOSTART");
+	(void)param_find("PWM_MIN");
+	(void)param_find("PWM_MAX");
+	(void)param_find("PWM_DISARMED");
+	(void)param_find("PWM_AUX_MIN");
+	(void)param_find("PWM_AUX_MAX");
+	(void)param_find("PWM_AUX_DISARMED");
 	
 	/* fetch initial parameter values */
 	parameters_update();
@@ -856,7 +862,7 @@ Sensors::parameters_update()
 					 M_DEG_TO_RAD_F * _parameters.board_offset[1],
 					 M_DEG_TO_RAD_F * _parameters.board_offset[2]);
 
-	_board_rotation = _board_rotation * board_rotation_offset;
+	_board_rotation = board_rotation_offset * _board_rotation;
 
 	/* update barometer qnh setting */
 	param_get(_parameter_handles.baro_qnh, &(_parameters.baro_qnh));
@@ -1288,6 +1294,10 @@ Sensors::diff_pres_poll(struct sensor_combined_s &raw)
 		_airspeed.true_airspeed_m_s = math::max(0.0f,
 							calc_true_airspeed(_diff_pres.differential_pressure_filtered_pa + raw.baro_pres_mbar * 1e2f,
 									raw.baro_pres_mbar * 1e2f, air_temperature_celsius));
+		_airspeed.true_airspeed_unfiltered_m_s = math::max(0.0f,
+							calc_true_airspeed(_diff_pres.differential_pressure_raw_pa + raw.baro_pres_mbar * 1e2f,
+								raw.baro_pres_mbar * 1e2f, air_temperature_celsius));
+
 		_airspeed.air_temperature_celsius = air_temperature_celsius;
 
 		/* announce the airspeed if needed, just publish else */
@@ -2066,35 +2076,25 @@ Sensors::task_main()
 {
 
 	/* start individual sensors */
-	int ret;
-	ret = accel_init();
+	int ret = 0;
+	do { /* create a scope to handle exit with break */
+		ret = accel_init();
+		if (ret) break;
+		ret = gyro_init();
+		if (ret) break;
+		ret = mag_init();
+		if (ret) break;
+		ret = baro_init();
+		if (ret) break;
+		ret = adc_init();
+		if (ret) break;
+		break;
+	} while (0);
 
 	if (ret) {
-		goto exit_immediate;
-	}
-
-	ret = gyro_init();
-
-	if (ret) {
-		goto exit_immediate;
-	}
-
-	ret = mag_init();
-
-	if (ret) {
-		goto exit_immediate;
-	}
-
-	ret = baro_init();
-
-	if (ret) {
-		goto exit_immediate;
-	}
-
-	ret = adc_init();
-
-	if (ret) {
-		goto exit_immediate;
+		_sensors_task = -1;
+		_exit(ret);
+		return;
 	}
 
 	/*
@@ -2237,8 +2237,6 @@ Sensors::task_main()
 	}
 
 	warnx("exiting.");
-
-exit_immediate:
 	_sensors_task = -1;
 	_exit(ret);
 }

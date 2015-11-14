@@ -49,7 +49,8 @@
 #define MAIN_STATE_AUTO_RTL 5
 #define MAIN_STATE_ACRO 6
 #define MAIN_STATE_OFFBOARD 7
-#define MAIN_STATE_MAX 8
+#define MAIN_STATE_STAB 8
+#define MAIN_STATE_MAX 9
 #define ARMING_STATE_INIT 0
 #define ARMING_STATE_STANDBY 1
 #define ARMING_STATE_ARMED 2
@@ -75,7 +76,8 @@
 #define NAVIGATION_STATE_DESCEND 12
 #define NAVIGATION_STATE_TERMINATION 13
 #define NAVIGATION_STATE_OFFBOARD 14
-#define NAVIGATION_STATE_MAX 15
+#define NAVIGATION_STATE_STAB 15
+#define NAVIGATION_STATE_MAX 16
 #define VEHICLE_MODE_FLAG_SAFETY_ARMED 128
 #define VEHICLE_MODE_FLAG_MANUAL_INPUT_ENABLED 64
 #define VEHICLE_MODE_FLAG_HIL_ENABLED 32
@@ -111,6 +113,9 @@
 #define VEHICLE_BATTERY_WARNING_NONE 0
 #define VEHICLE_BATTERY_WARNING_LOW 1
 #define VEHICLE_BATTERY_WARNING_CRITICAL 2
+#define RC_IN_MODE_DEFAULT 0
+#define RC_IN_MODE_OFF 1
+#define RC_IN_MODE_GENERATED 2
 
 #endif
 
@@ -132,9 +137,10 @@ struct vehicle_status_s {
 	uint8_t arming_state;
 	uint8_t hil_state;
 	bool failsafe;
+	bool calibration_enabled;
 	int32_t system_type;
-	int32_t system_id;
-	int32_t component_id;
+	uint32_t system_id;
+	uint32_t component_id;
 	bool is_rotary_wing;
 	bool is_vtol;
 	bool vtol_fw_permanent_stab;
@@ -144,7 +150,6 @@ struct vehicle_status_s {
 	bool condition_system_returned_to_home;
 	bool condition_auto_mission_available;
 	bool condition_global_position_valid;
-	bool condition_launch_position_valid;
 	bool condition_home_position_valid;
 	bool condition_local_position_valid;
 	bool condition_local_altitude_valid;
@@ -158,6 +163,7 @@ struct vehicle_status_s {
 	uint64_t rc_signal_lost_timestamp;
 	bool rc_signal_lost_cmd;
 	bool rc_input_blocked;
+	uint8_t rc_input_mode;
 	bool data_link_lost;
 	bool data_link_lost_cmd;
 	uint8_t data_link_lost_counter;
@@ -178,6 +184,8 @@ struct vehicle_status_s {
 	float battery_voltage;
 	float battery_current;
 	float battery_remaining;
+	float battery_discharged_mah;
+	uint32_t battery_cell_count;
 	uint8_t battery_warning;
 	uint16_t drop_rate_comm;
 	uint16_t errors_comm;
@@ -198,7 +206,8 @@ struct vehicle_status_s {
 	static const uint8_t MAIN_STATE_AUTO_RTL = 5;
 	static const uint8_t MAIN_STATE_ACRO = 6;
 	static const uint8_t MAIN_STATE_OFFBOARD = 7;
-	static const uint8_t MAIN_STATE_MAX = 8;
+	static const uint8_t MAIN_STATE_STAB = 8;
+	static const uint8_t MAIN_STATE_MAX = 9;
 	static const uint8_t ARMING_STATE_INIT = 0;
 	static const uint8_t ARMING_STATE_STANDBY = 1;
 	static const uint8_t ARMING_STATE_ARMED = 2;
@@ -224,7 +233,8 @@ struct vehicle_status_s {
 	static const uint8_t NAVIGATION_STATE_DESCEND = 12;
 	static const uint8_t NAVIGATION_STATE_TERMINATION = 13;
 	static const uint8_t NAVIGATION_STATE_OFFBOARD = 14;
-	static const uint8_t NAVIGATION_STATE_MAX = 15;
+	static const uint8_t NAVIGATION_STATE_STAB = 15;
+	static const uint8_t NAVIGATION_STATE_MAX = 16;
 	static const uint8_t VEHICLE_MODE_FLAG_SAFETY_ARMED = 128;
 	static const uint8_t VEHICLE_MODE_FLAG_MANUAL_INPUT_ENABLED = 64;
 	static const uint8_t VEHICLE_MODE_FLAG_HIL_ENABLED = 32;
@@ -260,6 +270,9 @@ struct vehicle_status_s {
 	static const uint8_t VEHICLE_BATTERY_WARNING_NONE = 0;
 	static const uint8_t VEHICLE_BATTERY_WARNING_LOW = 1;
 	static const uint8_t VEHICLE_BATTERY_WARNING_CRITICAL = 2;
+	static const uint8_t RC_IN_MODE_DEFAULT = 0;
+	static const uint8_t RC_IN_MODE_OFF = 1;
+	static const uint8_t RC_IN_MODE_GENERATED = 2;
 
 #endif
 };

@@ -1,7 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2012 PX4 Development Team. All rights reserved.
- *   Author: @author Lorenz Meier <lm@inf.ethz.ch>
+ *   Copyright (c) 2015 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,44 +32,20 @@
  ****************************************************************************/
 
 /**
- * @file optical_flow.h
- * Definition of the optical flow uORB topic.
- */
-
-#ifndef TOPIC_OMNIDIRECTIONAL_FLOW_H_
-#define TOPIC_OMNIDIRECTIONAL_FLOW_H_
-
-#include <stdint.h>
-#include <stdbool.h>
-#include "../uORB.h"
-
-/**
- * @addtogroup topics
- * @{
- */
-
-/**
- * Omnidirectional optical flow in NED body frame in SI units.
+ * @file standard_params.c
+ * Parameters for the standard VTOL controller.
  *
- * @see http://en.wikipedia.org/wiki/International_System_of_Units
+ * @author Simon Wilks	<simon@uaventure.com>
+ * @author Roman Bapst	<bapstroman@gmail.com>
  */
-struct omnidirectional_flow_s {
 
-	uint64_t timestamp;		/**< in microseconds since system start          */
-
-	uint16_t left[10];		/**< Left flow, in decipixels */
-	uint16_t right[10];		/**< Right flow, in decipixels */
-	float front_distance_m;		/**< Altitude / distance to object front in meters */
-	uint8_t	quality;		/**< Quality of the measurement, 0: bad quality, 255: maximum quality */
-	uint8_t sensor_id;		/**< id of the sensor emitting the flow value */
-
-};
+#include <systemlib/param/param.h>
 
 /**
- * @}
+ * Target throttle value for pusher/puller motor during the transition to fw mode
+ *
+ * @min 0.0
+ * @max 1.0
+ * @group VTOL Attitude Control
  */
-
-/* register this as object request broker structure */
-ORB_DECLARE(omnidirectional_flow);
-
-#endif
+PARAM_DEFINE_FLOAT(VT_TRANS_THR, 0.6f);

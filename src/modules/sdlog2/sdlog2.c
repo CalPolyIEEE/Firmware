@@ -104,6 +104,8 @@
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
 #include <systemlib/perf_counter.h>
+#include <systemlib/git_version.h>
+#include <systemlib/printload.h>
 #include <version/version.h>
 
 #include <mavlink/mavlink_log.h>
@@ -144,6 +146,19 @@ PARAM_DEFINE_INT32(SDLOG_RATE, -1);
  */
 PARAM_DEFINE_INT32(SDLOG_EXT, -1);
 
+/**
+ * Use timestamps only if GPS 3D fix is available
+ *
+ * A value of 1 constrains the log folder creation
+ * to only use the time stamp if a 3D GPS lock is
+ * present.
+ *
+ * @min 0
+ * @max  1
+ * @group SD Logging
+ */
+PARAM_DEFINE_INT32(SDLOG_GPSTIME, 1);
+
 #define LOGBUFFER_WRITE_AND_COUNT(_msg) if (logbuffer_write(&lb, &log_msg, LOG_PACKET_SIZE(_msg))) { \
 		log_msgs_written++; \
 	} else { \
@@ -163,6 +178,7 @@ static const int MAX_WRITE_CHUNK = 512;
 static const int MIN_BYTES_TO_WRITE = 512;
 
 static bool _extended_logging = false;
+static bool _gpstime_only = false;
 
 #define MOUNTPOINT "/fs/microsd"
 static const char *mountpoint = MOUNTPOINT;
@@ -184,7 +200,8 @@ static unsigned long log_msgs_written = 0;
 static unsigned long log_msgs_skipped = 0;
 
 /* GPS time, used for log files naming */
-static uint64_t gps_time = 0;
+static uint64_t gps_time_sec = 0;
+static bool has_gps_3d_fix = false;
 
 /* current state of logging */
 static bool logging_enabled = false;
@@ -273,6 +290,11 @@ static void handle_status(struct vehicle_status_s *cmd);
 static int create_log_dir(void);
 
 /**
+ * Get the time struct from the currently preferred time source
+ */
+static bool get_log_time_utc_tt(struct tm *tt, bool boot_time);
+
+/**
  * Select first free log file name and open it.
  */
 static int open_log_file(void);
@@ -286,7 +308,7 @@ sdlog2_usage(const char *reason)
 		fprintf(stderr, "%s\n", reason);
 	}
 
-	errx(1, "usage: sdlog2 {start|stop|status} [-r <log rate>] [-b <buffer size>] -e -a -t -x\n"
+	errx(1, "usage: sdlog2 {start|stop|status|on|off} [-r <log rate>] [-b <buffer size>] -e -a -t -x\n"
 		 "\t-r\tLog rate in Hz, 0 means unlimited rate\n"
 		 "\t-b\tLog buffer size in KiB, default is 8\n"
 		 "\t-e\tEnable logging by default (if not, can be started by command)\n"
@@ -324,7 +346,20 @@ int sdlog2_main(int argc, char *argv[])
 						 3000,
 						 sdlog2_thread_main,
 						 (char * const *)argv);
-		exit(0);
+
+		/* wait for the task to launch */
+		unsigned const max_wait_us = 1000000;
+		unsigned const max_wait_steps = 2000;
+
+		unsigned i;
+		for (i = 0; i < max_wait_steps; i++) {
+			usleep(max_wait_us / max_wait_steps);
+			if (thread_running) {
+				break;
+			}
+		}
+
+		exit(!(i < max_wait_steps));
 	}
 
 	if (!strcmp(argv[1], "stop")) {
@@ -349,6 +384,8 @@ int sdlog2_main(int argc, char *argv[])
 	if (!strcmp(argv[1], "on")) {
 		struct vehicle_command_s cmd;
 		cmd.command = VEHICLE_CMD_PREFLIGHT_STORAGE;
+		cmd.param1 = -1;
+		cmd.param2 = -1;
 		cmd.param3 = 1;
 		int fd = orb_advertise(ORB_ID(vehicle_command), &cmd);
 		close(fd);
@@ -358,7 +395,9 @@ int sdlog2_main(int argc, char *argv[])
 	if (!strcmp(argv[1], "off")) {
 		struct vehicle_command_s cmd;
 		cmd.command = VEHICLE_CMD_PREFLIGHT_STORAGE;
-		cmd.param3 = 0;
+		cmd.param1 = -1;
+		cmd.param2 = -1;
+		cmd.param3 = 2;
 		int fd = orb_advertise(ORB_ID(vehicle_command), &cmd);
 		close(fd);
 		return 0;
@@ -368,20 +407,41 @@ int sdlog2_main(int argc, char *argv[])
 	exit(1);
 }
 
+bool get_log_time_utc_tt(struct tm *tt, bool boot_time) {
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	/* use RTC time for log file naming, e.g. /fs/microsd/2014-01-19/19_37_52.px4log */
+	time_t utc_time_sec;
+
+	if (_gpstime_only && has_gps_3d_fix) {
+		utc_time_sec = gps_time_sec;
+	} else {
+		utc_time_sec = ts.tv_sec + (ts.tv_nsec / 1e9);
+	}
+
+	if (utc_time_sec > PX4_EPOCH_SECS) {
+		/* strip the time elapsed since boot */
+		if (boot_time) {
+			utc_time_sec -= hrt_absolute_time() / 1e6;
+		}
+
+		struct tm *ttp = gmtime_r(&utc_time_sec, tt);
+		return (ttp != NULL);
+	} else {
+		return false;
+	}
+}
+
 int create_log_dir()
 {
 	/* create dir on sdcard if needed */
 	uint16_t dir_number = 1; // start with dir sess001
 	int mkdir_ret;
 
-	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
-	/* use RTC time for log file naming, e.g. /fs/microsd/2014-01-19/19_37_52.px4log */
-	time_t utc_time_sec = ts.tv_sec + (ts.tv_nsec / 1e9);
 	struct tm tt;
-	struct tm *ttp = gmtime_r(&utc_time_sec, &tt);
+	bool time_ok = get_log_time_utc_tt(&tt, true);
 
-	if (log_name_timestamp && ttp && (utc_time_sec > PX4_EPOCH_SECS)) {
+	if (log_name_timestamp && time_ok) {
 		int n = snprintf(log_dir, sizeof(log_dir), "%s/", log_root);
 		strftime(log_dir + n, sizeof(log_dir) - n, "%Y-%m-%d", &tt);
 		mkdir_ret = mkdir(log_dir, S_IRWXU | S_IRWXG | S_IRWXO);
@@ -430,15 +490,11 @@ int open_log_file()
 	char log_file_name[32] = "";
 	char log_file_path[64] = "";
 
-	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
-	/* use RTC time for log file naming, e.g. /fs/microsd/2014-01-19/19_37_52.px4log */
-	time_t utc_time_sec = ts.tv_sec + (ts.tv_nsec / 1e9);
 	struct tm tt;
-	struct tm *ttp = gmtime_r(&utc_time_sec, &tt);
+	bool time_ok = get_log_time_utc_tt(&tt, false);
 
 	/* start logging if we have a valid time and the time is not in the past */
-	if (log_name_timestamp && ttp && (utc_time_sec > PX4_EPOCH_SECS)) {
+	if (log_name_timestamp && time_ok) {
 		strftime(log_file_name, sizeof(log_file_name), "%H_%M_%S.px4log", &tt);
 		snprintf(log_file_path, sizeof(log_file_path), "%s/%s", log_dir, log_file_name);
 
@@ -483,14 +539,10 @@ int open_perf_file(const char* str)
 	char log_file_name[32] = "";
 	char log_file_path[64] = "";
 
-	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
-	/* use RTC time for log file naming, e.g. /fs/microsd/2014-01-19/19_37_52.txt */
-	time_t utc_time_sec = ts.tv_sec + (ts.tv_nsec / 1e9);
 	struct tm tt;
-	struct tm *ttp = gmtime_r(&utc_time_sec, &tt);
+	bool time_ok = get_log_time_utc_tt(&tt, false);
 
-	if (log_name_timestamp && ttp && (utc_time_sec > PX4_EPOCH_SECS)) {
+	if (log_name_timestamp && time_ok) {
 		strftime(log_file_name, sizeof(log_file_name), "perf%H_%M_%S.txt", &tt);
 		snprintf(log_file_path, sizeof(log_file_path), "%s/%s_%s", log_dir, str, log_file_name);
 
@@ -677,9 +729,16 @@ void sdlog2_start_log()
 	}
 
 	/* write all performance counters */
+	hrt_abstime curr_time = hrt_absolute_time();
+	struct print_load_s load;
 	int perf_fd = open_perf_file("preflight");
+	init_print_load_s(curr_time, &load);
+	print_load(curr_time, perf_fd, &load);
 	dprintf(perf_fd, "PERFORMANCE COUNTERS PRE-FLIGHT\n\n");
 	perf_print_all(perf_fd);
+	dprintf(perf_fd, "\nLOAD PRE-FLIGHT\n\n");
+	usleep(500 * 1000);
+	print_load(hrt_absolute_time(), perf_fd, &load);
 	close(perf_fd);
 
 	/* reset performance counters to get in-flight min and max values in post flight log */
@@ -715,8 +774,15 @@ void sdlog2_stop_log()
 
 	/* write all performance counters */
 	int perf_fd = open_perf_file("postflight");
+	hrt_abstime curr_time = hrt_absolute_time();
 	dprintf(perf_fd, "PERFORMANCE COUNTERS POST-FLIGHT\n\n");
 	perf_print_all(perf_fd);
+	struct print_load_s load;
+	dprintf(perf_fd, "\nLOAD POST-FLIGHT\n\n");
+	init_print_load_s(curr_time, &load);
+	print_load(curr_time, perf_fd, &load);
+	sleep(1);
+	print_load(hrt_absolute_time(), perf_fd, &load);
 	close(perf_fd);
 
 	/* free log writer performance counter */
@@ -759,7 +825,7 @@ int write_version(int fd)
 	};
 
 	/* fill version message and write it */
-	strncpy(log_msg_VER.body.fw_git, GIT_VERSION, sizeof(log_msg_VER.body.fw_git));
+	strncpy(log_msg_VER.body.fw_git, px4_git_version, sizeof(log_msg_VER.body.fw_git));
 	strncpy(log_msg_VER.body.arch, HW_ARCH, sizeof(log_msg_VER.body.arch));
 	return write(fd, &log_msg_VER, sizeof(log_msg_VER));
 }
@@ -922,7 +988,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		sdlog2_usage(NULL);
 	}
 
-	gps_time = 0;
+	gps_time_sec = 0;
 
 	/* interpret logging params */
 
@@ -957,6 +1023,22 @@ int sdlog2_thread_main(int argc, char *argv[])
 			_extended_logging = true;
 		} else if (param_log_extended == 0) {
 			_extended_logging = false;
+		}
+		/* any other value means to ignore the parameter, so no else case */
+
+	}
+
+	param_t log_gpstime_ph = param_find("SDLOG_GPSTIME");
+
+	if (log_gpstime_ph != PARAM_INVALID) {
+
+		int32_t param_log_gpstime;
+		param_get(log_gpstime_ph, &param_log_gpstime);
+
+		if (param_log_gpstime > 0) {
+			_gpstime_only = true;
+		} else if (param_log_gpstime == 0) {
+			_gpstime_only = false;
 		}
 		/* any other value means to ignore the parameter, so no else case */
 
@@ -1016,7 +1098,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct vehicle_global_position_s global_pos;
 		struct position_setpoint_triplet_s triplet;
 		struct vehicle_vicon_position_s vicon_pos;
-		struct vision_position_estimate vision_pos;
+		struct vision_position_estimate_s vision_pos;
 		struct optical_flow_s flow;
 		struct rc_channels_s rc;
 		struct differential_pressure_s diff_pres;
@@ -1026,7 +1108,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct battery_status_s battery;
 		struct telemetry_status_s telemetry;
 		struct range_finder_report range_finder;
-		struct estimator_status_report estimator_status;
+		struct estimator_status_s estimator_status;
 		struct tecs_status_s tecs_status;
 		struct system_power_s system_power;
 		struct servorail_status_s servorail_status;
@@ -1175,8 +1257,6 @@ int sdlog2_thread_main(int argc, char *argv[])
 	/* close stdout */
 	close(1);
 
-	thread_running = true;
-
 	/* initialize thread synchronization */
 	pthread_mutex_init(&logbuffer_mutex, NULL);
 	pthread_cond_init(&logbuffer_cond, NULL);
@@ -1203,12 +1283,15 @@ int sdlog2_thread_main(int argc, char *argv[])
 		/* check GPS topic to get GPS time */
 		if (log_name_timestamp) {
 			if (!orb_copy(ORB_ID(vehicle_gps_position), subs.gps_pos_sub, &buf_gps_pos)) {
-				gps_time = buf_gps_pos.time_utc_usec;
+				gps_time_sec = buf_gps_pos.time_utc_usec / 1e6;
 			}
 		}
 
 		sdlog2_start_log();
 	}
+
+	/* running, report */
+	thread_running = true;
 
 	while (!main_thread_should_exit) {
 		usleep(sleep_delay);
@@ -1231,7 +1314,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 		bool gps_pos_updated = copy_if_updated(ORB_ID(vehicle_gps_position), &subs.gps_pos_sub, &buf_gps_pos);
 
 		if (gps_pos_updated && log_name_timestamp) {
-			gps_time = buf_gps_pos.time_utc_usec;
+			gps_time_sec = buf_gps_pos.time_utc_usec / 1e6;
+			has_gps_3d_fix = buf_gps_pos.fix_type == 3;
 		}
 
 		if (!logging_enabled) {
@@ -1796,15 +1880,16 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.body.log_TECS.altitudeFiltered = buf.tecs_status.altitude_filtered;
 			log_msg.body.log_TECS.flightPathAngleSp = buf.tecs_status.flightPathAngleSp;
 			log_msg.body.log_TECS.flightPathAngle = buf.tecs_status.flightPathAngle;
-			log_msg.body.log_TECS.flightPathAngleFiltered = buf.tecs_status.flightPathAngleFiltered;
 			log_msg.body.log_TECS.airspeedSp = buf.tecs_status.airspeedSp;
 			log_msg.body.log_TECS.airspeedFiltered = buf.tecs_status.airspeed_filtered;
 			log_msg.body.log_TECS.airspeedDerivativeSp = buf.tecs_status.airspeedDerivativeSp;
 			log_msg.body.log_TECS.airspeedDerivative = buf.tecs_status.airspeedDerivative;
-			log_msg.body.log_TECS.totalEnergyRateSp = buf.tecs_status.totalEnergyRateSp;
-			log_msg.body.log_TECS.totalEnergyRate = buf.tecs_status.totalEnergyRate;
-			log_msg.body.log_TECS.energyDistributionRateSp = buf.tecs_status.energyDistributionRateSp;
-			log_msg.body.log_TECS.energyDistributionRate = buf.tecs_status.energyDistributionRate;
+			log_msg.body.log_TECS.totalEnergyError = buf.tecs_status.totalEnergyError;
+			log_msg.body.log_TECS.energyDistributionError = buf.tecs_status.energyDistributionError;
+			log_msg.body.log_TECS.totalEnergyRateError = buf.tecs_status.totalEnergyRateError;
+			log_msg.body.log_TECS.energyDistributionRateError = buf.tecs_status.energyDistributionRateError;
+			log_msg.body.log_TECS.throttle_integ = buf.tecs_status.throttle_integ;
+			log_msg.body.log_TECS.pitch_integ = buf.tecs_status.pitch_integ;
 			log_msg.body.log_TECS.mode = (uint8_t)buf.tecs_status.mode;
 			LOGBUFFER_WRITE_AND_COUNT(TECS);
 		}
@@ -1872,8 +1957,9 @@ int sdlog2_thread_main(int argc, char *argv[])
 void sdlog2_status()
 {
 	warnx("extended logging: %s", (_extended_logging) ? "ON" : "OFF");
+	warnx("time: gps: %u seconds", (unsigned)gps_time_sec);
 	if (!logging_enabled) {
-		warnx("standing by");
+		warnx("not logging");
 	} else {
 
 		float kibibytes = log_bytes_written / 1024.0f;
@@ -1975,7 +2061,7 @@ void handle_command(struct vehicle_command_s *cmd)
 		if (param == 1)	{
 			sdlog2_start_log();
 
-		} else if (param == -1)	{
+		} else if (param == 2)	{
 			sdlog2_stop_log();
 		} else {
 			// Silently ignore non-matching command values, as they could be for params.

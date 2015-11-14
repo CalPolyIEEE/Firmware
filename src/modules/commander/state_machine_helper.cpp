@@ -125,7 +125,8 @@ arming_state_transition(struct vehicle_status_s *status,		///< current vehicle s
 		int prearm_ret = OK;
 
 		/* only perform the check if we have to */
-		if (fRunPreArmChecks && new_arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
+		if (fRunPreArmChecks && new_arming_state == vehicle_status_s::ARMING_STATE_ARMED
+				&& status->hil_state == vehicle_status_s::HIL_STATE_OFF) {
 			prearm_ret = prearm_check(status, mavlink_fd);
 		}
 
@@ -216,23 +217,13 @@ arming_state_transition(struct vehicle_status_s *status,		///< current vehicle s
 			valid_transition = true;
 		}
 
-		// Sensors need to be initialized for STANDBY state, except for HIL
-		if ((status->hil_state != vehicle_status_s::HIL_STATE_ON) &&
-			(new_arming_state == vehicle_status_s::ARMING_STATE_STANDBY) &&
-			(!status->condition_system_sensors_initialized)) {
-			mavlink_and_console_log_critical(mavlink_fd, "Not ready to fly: Sensors need inspection");
-			feedback_provided = true;
-			valid_transition = false;
-			status->arming_state = vehicle_status_s::ARMING_STATE_STANDBY_ERROR;
-		}
-
 		// Check if we are trying to arm, checks look good but we are in STANDBY_ERROR
 		if (status->arming_state == vehicle_status_s::ARMING_STATE_STANDBY_ERROR) {
 
 			if (new_arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
 
 				if (status->condition_system_sensors_initialized) {
-					mavlink_and_console_log_critical(mavlink_fd, "Preflight check now OK, power cycle before arming");
+					mavlink_and_console_log_critical(mavlink_fd, "Preflight check resolved, reboot before arming");
 				} else {
 					mavlink_and_console_log_critical(mavlink_fd, "Preflight check failed, refusing to arm");
 				}
@@ -240,11 +231,24 @@ arming_state_transition(struct vehicle_status_s *status,		///< current vehicle s
 
 			} else if ((new_arming_state == vehicle_status_s::ARMING_STATE_STANDBY) &&
 					status->condition_system_sensors_initialized) {
-				mavlink_and_console_log_critical(mavlink_fd, "Preflight check resolved, power cycle to complete");
+				mavlink_and_console_log_critical(mavlink_fd, "Preflight check resolved, reboot to complete");
 				feedback_provided = true;
 			} else {
-
+				// Silent ignore
+				feedback_provided = true;
 			}
+
+		// Sensors need to be initialized for STANDBY state, except for HIL
+		} else if ((status->hil_state != vehicle_status_s::HIL_STATE_ON) &&
+			(new_arming_state == vehicle_status_s::ARMING_STATE_STANDBY) &&
+			(status->arming_state != vehicle_status_s::ARMING_STATE_STANDBY_ERROR) &&
+			(!status->condition_system_sensors_initialized)) {
+			if (!fRunPreArmChecks) {
+				mavlink_and_console_log_critical(mavlink_fd, "Not ready to fly: Sensors need inspection");
+			}
+			feedback_provided = true;
+			valid_transition = false;
+			status->arming_state = vehicle_status_s::ARMING_STATE_STANDBY_ERROR;
 		}
 
 		// Finish up the state transition
@@ -296,6 +300,7 @@ main_state_transition(struct vehicle_status_s *status, main_state_t new_main_sta
 	switch (new_main_state) {
 	case vehicle_status_s::MAIN_STATE_MANUAL:
 	case vehicle_status_s::MAIN_STATE_ACRO:
+	case vehicle_status_s::MAIN_STATE_STAB:
 		ret = TRANSITION_CHANGED;
 		break;
 
@@ -370,7 +375,7 @@ transition_result_t hil_state_transition(hil_state_t new_state, int status_pub, 
 		switch (new_state) {
 		case vehicle_status_s::HIL_STATE_OFF:
 			/* we're in HIL and unexpected things can happen if we disable HIL now */
-			mavlink_log_critical(mavlink_fd, "#audio: Not switching off HIL (safety)");
+			mavlink_log_critical(mavlink_fd, "Not switching off HIL (safety)");
 			ret = TRANSITION_DENIED;
 			break;
 
@@ -485,10 +490,11 @@ bool set_nav_state(struct vehicle_status_s *status, const bool data_link_loss_en
 	switch (status->main_state) {
 	case vehicle_status_s::MAIN_STATE_ACRO:
 	case vehicle_status_s::MAIN_STATE_MANUAL:
+	case vehicle_status_s::MAIN_STATE_STAB:
 	case vehicle_status_s::MAIN_STATE_ALTCTL:
 	case vehicle_status_s::MAIN_STATE_POSCTL:
 		/* require RC for all manual modes */
-		if ((status->rc_signal_lost || status->rc_signal_lost_cmd) && armed) {
+		if ((status->rc_signal_lost || status->rc_signal_lost_cmd) && armed && !status->condition_landed) {
 			status->failsafe = true;
 
 			if (status->condition_global_position_valid && status->condition_home_position_valid) {
@@ -509,6 +515,10 @@ bool set_nav_state(struct vehicle_status_s *status, const bool data_link_loss_en
 
 			case vehicle_status_s::MAIN_STATE_MANUAL:
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_MANUAL;
+				break;
+
+			case vehicle_status_s::MAIN_STATE_STAB:
+				status->nav_state = vehicle_status_s::NAVIGATION_STATE_STAB;
 				break;
 
 			case vehicle_status_s::MAIN_STATE_ALTCTL:
@@ -689,5 +699,5 @@ int prearm_check(const struct vehicle_status_s *status, const int mavlink_fd)
 		checkAirspeed = true;
 	}
 
-	return !Commander::preflightCheck(mavlink_fd, true, true, true, true, checkAirspeed, true, true);
+	return !Commander::preflightCheck(mavlink_fd, true, true, true, true, checkAirspeed, !(status->rc_input_mode == vehicle_status_s::RC_IN_MODE_OFF), !status->circuit_breaker_engaged_gpsfailure_check, true);
 }

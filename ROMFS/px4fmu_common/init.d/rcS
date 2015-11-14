@@ -26,7 +26,7 @@ set LOG_FILE /fs/microsd/bootlog.txt
 # REBOOTWORK this needs to start after the flight control loop
 if mount -t vfat /dev/mmcsd0 /fs/microsd
 then
-	echo "[i] microSD mounted: /fs/microsd" >> $LOG_FILE
+	echo "[i] microSD mounted: /fs/microsd"
 	# Start playing the startup tune
 	tone_alarm start
 else
@@ -35,9 +35,9 @@ else
 	then
 		if mount -t vfat /dev/mmcsd0 /fs/microsd
 		then
-			echo "[i] microSD card formatted" >> $LOG_FILE
+			echo "[i] microSD card formatted"
 		else
-			echo "[i] format failed" >> $LOG_FILE
+			echo "[i] format failed"
 			tone_alarm MNBG
 			set LOG_FILE /dev/null
 		fi
@@ -52,7 +52,7 @@ fi
 #
 if [ -f $FRC ]
 then
-	echo "[i] Executing script: $FRC" >> $LOG_FILE
+	echo "[i] Executing script: $FRC"
 	sh $FRC
 	set MODE custom
 fi
@@ -81,9 +81,9 @@ then
 	param select $PARAM_FILE
 	if param load
 	then
-		echo "[param] Loaded: $PARAM_FILE" >> $LOG_FILE
+		echo "[param] Loaded: $PARAM_FILE"
 	else
-		echo "[param] FAILED loading $PARAM_FILE" >> $LOG_FILE
+		echo "[param] FAILED loading $PARAM_FILE"
 		if param reset
 		then
 		fi
@@ -101,24 +101,28 @@ then
 		fi
 	fi
 
-	if pca8574 start
-	then
-	fi
+	# Currently unused, but might be useful down the road
+	#if pca8574 start
+	#then
+	#fi
 
 	#
 	# Set default values
-   # Go to https://pixhawk.org/dev/system_startup for parameter information
 	#
+   param set SYS_USE_IO yes
+   param set SYS_AUTOSTART 4001
+   param set SYS_AUTOCONFIG 1
+
 	set HIL no
 	set VEHICLE_TYPE mc
 	set MIXER quad_x
 	set MIXER_AUX none
 	set OUTPUT_MODE fmu
 	set PWM_OUT 1234
-	set PWM_RATE 50
-	set PWM_DISARMED 900
-	set PWM_MIN 1200
-	set PWM_MAX 2000
+	set PWM_RATE 400
+	set PWM_DISARMED 0
+	set PWM_MIN 1025
+	set PWM_MAX 1975
 	set PWM_AUX_OUT none
 	set PWM_AUX_RATE none
 	set PWM_AUX_DISARMED none
@@ -134,10 +138,6 @@ then
 	set GPS yes
 	set GPS_FAKE no
 	set FAILSAFE none
-
-   param set SYS_USE_IO yes
-   param set SYS_AUTOSTART 4001
-   param set SYS_AUTOCONFIG 1
 
 	#
 	# Set AUTOCNF flag to use it in AUTOSTART scripts
@@ -166,7 +166,7 @@ then
 	#
 	if param compare SYS_AUTOSTART 0
 	then
-		echo "[i] No autostart" >> $LOG_FILE
+		echo "[i] No autostart"
 	else
 		sh /etc/init.d/rc.autostart
 	fi
@@ -177,7 +177,7 @@ then
 	#
 	if [ -f $FCONFIG ]
 	then
-		echo "[i] Custom config: $FCONFIG" >> $LOG_FILE
+		echo "[i] Custom config: $FCONFIG"
 		sh $FCONFIG
 	fi
 	unset FCONFIG
@@ -238,11 +238,11 @@ then
 
 					set IO_PRESENT yes
 				else
-					echo "PX4IO update failed" >> $LOG_FILE
+					echo "ERROR: PX4IO update failed" >> $LOG_FILE
 					tone_alarm $TUNE_ERR
 				fi
 			else
-				echo "PX4IO update failed" >> $LOG_FILE
+				echo "ERROR: PX4IO update failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
 			fi
 		fi
@@ -251,6 +251,7 @@ then
 		if [ $IO_PRESENT == no ]
 		then
 			echo "[i] ERROR: PX4IO not found"
+			echo "ERROR: PX4IO not found" >> $LOG_FILE
 			tone_alarm $TUNE_ERR
 		fi
 	fi
@@ -272,7 +273,7 @@ then
 	then
 		# Need IO for output but it not present, disable output
 		set OUTPUT_MODE none
-		echo "[i] ERROR: PX4IO not found, disabling output" >> $LOG_FILE
+		echo "[i] ERROR: PX4IO not found, disabling output"
 
 		# Avoid using ttyS0 for MAVLink on FMUv1
 		if ver hwcmp PX4FMU_V1
@@ -289,6 +290,7 @@ then
 	if [ $HIL == yes ]
 	then
 		set OUTPUT_MODE hil
+		set GPS no
 		if ver hwcmp PX4FMU_V1
 		then
 			set FMU_MODE serial
@@ -303,9 +305,27 @@ then
 	fi
 
 	#
+	# UAVCAN
+	#
+	sh /etc/init.d/rc.uavcan
+
+	#
 	# Sensors System (start before Commander so Preflight checks are properly run)
 	#
 	sh /etc/init.d/rc.sensors
+	
+	if [ $GPS == yes ]
+	then
+		if [ $GPS_FAKE == yes ]
+		then
+			echo "[i] Faking GPS"
+			gps start -f
+		else
+			gps start
+		fi
+	fi
+	unset GPS
+	unset GPS_FAKE
 
 	# Needs to be this early for in-air-restarts
 	commander start
@@ -333,6 +353,7 @@ then
 			then
 				sh /etc/init.d/rc.io
 			else
+				echo "ERROR: PX4IO start failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
 			fi
 		fi
@@ -341,9 +362,10 @@ then
 		then
 			if fmu mode_$FMU_MODE
 			then
-				echo "[i] FMU mode_$FMU_MODE started" >> $LOG_FILE
+				echo "[i] FMU mode_$FMU_MODE started"
 			else
-				echo "[i] ERROR: FMU mode_$FMU_MODE start failed" >> $LOG_FILE
+				echo "[i] ERROR: FMU mode_$FMU_MODE start failed"
+				echo "ERROR: FMU start failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
 			fi
 
@@ -377,6 +399,7 @@ then
 				echo "[i] MK started"
 			else
 				echo "[i] ERROR: MK start failed"
+				echo "ERROR: MK start failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
 			fi
 			unset MKBLCTRL_ARG
@@ -390,6 +413,7 @@ then
 				echo "[i] HIL output started"
 			else
 				echo "[i] ERROR: HIL output start failed"
+				echo "ERROR: HIL output start failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
 			fi
 		fi
@@ -403,10 +427,11 @@ then
 			then
 				if px4io start
 				then
-					echo "[i] PX4IO started" >> $LOG_FILE
+					echo "[i] PX4IO started"
 					sh /etc/init.d/rc.io
 				else
-					echo "[i] ERROR: PX4IO start failed" >> $LOG_FILE
+					echo "[i] ERROR: PX4IO start failed"
+					echo "ERROR: PX4IO start failed" >> $LOG_FILE
 					tone_alarm $TUNE_ERR
 				fi
 			fi
@@ -415,9 +440,10 @@ then
 			then
 				if fmu mode_$FMU_MODE
 				then
-					echo "[i] FMU mode_$FMU_MODE started" >> $LOG_FILE
+					echo "[i] FMU mode_$FMU_MODE started"
 				else
-					echo "[i] ERROR: FMU mode_$FMU_MODE start failed" >> $LOG_FILE
+					echo "[i] ERROR: FMU mode_$FMU_MODE start failed"
+					echo "ERROR: FMU mode_$FMU_MODE start failed" >> $LOG_FILE
 					tone_alarm $TUNE_ERR
 				fi
 
@@ -442,13 +468,13 @@ then
 		if [ $TTYS1_BUSY == yes ]
 		then
 			# Start MAVLink on ttyS0, because FMU ttyS1 pins configured as something else
-			set MAVLINK_F "-r 1000 -d /dev/ttyS0"
+			set MAVLINK_F "-r 1200 -d /dev/ttyS0"
 
 			# Exit from nsh to free port for mavlink
 			set EXIT_ON_END yes
 		else
 			# Start MAVLink on default port: ttyS1
-			set MAVLINK_F "-r 1000"
+			set MAVLINK_F "-r 1200"
 		fi
 	fi
 
@@ -464,34 +490,22 @@ then
 		# but this works for now
 		if param compare SYS_COMPANION 921600
 		then
-			mavlink start -d /dev/ttyS2 -b 921600 -m onboard -r 20000
+			mavlink start -d /dev/ttyS2 -b 921600 -m onboard -r 80000 -x
 		fi
 		if param compare SYS_COMPANION 57600
 		then
-			mavlink start -d /dev/ttyS2 -b 57600 -m onboard -r 1000
+			mavlink start -d /dev/ttyS2 -b 57600 -m onboard -r 5000 -x
+		fi
+		if param compare SYS_COMPANION 157600
+		then
+			mavlink start -d /dev/ttyS2 -b 57600 -m osd -r 1000
 		fi
 	fi
 
-	# UAVCAN
 	#
-	sh /etc/init.d/rc.uavcan
-
-	#
-	# Logging, GPS
+	# Logging
 	#
 	sh /etc/init.d/rc.logging
-
-	if [ $GPS == yes ]
-	then
-		if [ $GPS_FAKE == yes ]
-		then
-			echo "[i] Faking GPS"
-			gps start -f
-		else
-			gps start
-		fi
-	fi
-	unset GPS_FAKE
 
 	#
 	# Start up ARDrone Motor interface
@@ -537,11 +551,11 @@ then
 	#
 	if [ $VEHICLE_TYPE == mc ]
 	then
-		echo "[i] MULTICOPTER" >> $LOG_FILE
+		echo "[i] MULTICOPTER"
 
 		if [ $MIXER == none ]
 		then
-			echo "Mixer undefined" >> $LOG_FILE
+			echo "Mixer undefined"
 		fi
 
 		if [ $MAV_TYPE == none ]
@@ -557,7 +571,7 @@ then
 			fi
 			if [ $MIXER == tri_y_yaw- -o $MIXER == tri_y_yaw+ ]
 			then
-				set MAV_TYPE 2
+				set MAV_TYPE 15
 			fi
 			if [ $MIXER == hexa_x -o $MIXER == hexa_+ ]
 			then
@@ -580,7 +594,8 @@ then
 		# Still no MAV_TYPE found
 		if [ $MAV_TYPE == none ]
 		then
-			echo "Unknown MAV_TYPE" >> $LOG_FILE
+			echo "Unknown MAV_TYPE"
+			param set MAV_TYPE 2
 		else
 			param set MAV_TYPE $MAV_TYPE
 		fi
@@ -618,12 +633,17 @@ then
 			then
 				set MAV_TYPE 21
 			fi
+			if [ $MIXER == quad_x_pusher_vtol ]
+			then
+				set MAV_TYPE 22
+			fi
 		fi
 
 		# Still no MAV_TYPE found
 		if [ $MAV_TYPE == none ]
 		then
 			echo "Unknown MAV_TYPE"
+			param set MAV_TYPE 19
 		else
 			param set MAV_TYPE $MAV_TYPE
 		fi
@@ -654,6 +674,8 @@ then
 		then
 			sh /etc/init.d/rc.axialracing_ax10_apps
 		fi
+
+		param set MAV_TYPE 10
 	fi
 
 	unset MIXER
@@ -670,7 +692,7 @@ then
 	#
 	if [ $VEHICLE_TYPE == none ]
 	then
-		echo "[i] No autostart ID found" >> $LOG_FILE
+		echo "[i] No autostart ID found"
 
 	fi
 
@@ -683,17 +705,10 @@ then
 	fi
 	unset FEXTRAS
 
-	if [ $EXIT_ON_END == yes ]
-	then
-		echo "Exit from nsh"
-		exit
-	fi
-	unset EXIT_ON_END
-
-	# Run no SD alarm last
+	# Run no SD alarm
 	if [ $LOG_FILE == /dev/null ]
 	then
-		echo "[i] No microSD card found" >> $LOG_FILE
+		echo "[i] No microSD card found"
 		# Play SOS
 		tone_alarm error
 	fi
@@ -701,6 +716,22 @@ then
 # End of autostart
 fi
 
-# There is no further processing, so we can free some RAM
+# There is no further script processing, so we can free some RAM
 # XXX potentially unset all script variables.
 unset TUNE_ERR
+
+# Boot is complete, inform MAVLink app(s) that the system is now fully up and running
+mavlink boot_complete
+
+if ver hwcmp PX4FMU_V2
+then
+	# Check for flow sensor - as it is a background task, launch it last
+	px4flow start &
+fi
+
+if [ $EXIT_ON_END == yes ]
+then
+	echo "Exit from nsh"
+	exit
+fi
+unset EXIT_ON_END

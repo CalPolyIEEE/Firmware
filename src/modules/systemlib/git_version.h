@@ -1,8 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2008-2013 PX4 Development Team. All rights reserved.
- *   Author: Samuel Zihlmann <samuezih@ee.ethz.ch>
- *   		 Lorenz Meier <lm@inf.ethz.ch>
+ *   Copyright (c) 2015 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,35 +32,20 @@
  ****************************************************************************/
 
 /**
- * @file vehicle_bodyframe_speed_setpoint.h
- * Definition of the bodyframe speed setpoint uORB topic.
+ * @file git_version.h
+ *
+ * GIT repository version
  */
 
-#ifndef TOPIC_VEHICLE_BODYFRAME_SPEED_SETPOINT_H_
-#define TOPIC_VEHICLE_BODYFRAME_SPEED_SETPOINT_H_
+#pragma once
 
-#include "../uORB.h"
+#include <stdint.h>
 
-/**
- * @addtogroup topics
- * @{
- */
+#include "build_git_version.h"
 
-struct vehicle_bodyframe_speed_setpoint_s {
-	uint64_t timestamp;		/**< in microseconds since system start, is set whenever the writing thread stores new data */
+__BEGIN_DECLS
 
-	float vx;		/**< in m/s				  		*/
-	float vy;		/**< in m/s				  		*/
-//	float vz;		/**< in m/s				  		*/
-	float thrust_sp;
-	float yaw_sp;	/**< in radian		-PI +PI		*/
-}; /**< Speed in bodyframe to go to */
+__EXPORT extern const char* px4_git_version;
+__EXPORT extern const uint64_t px4_git_version_binary;
 
-/**
- * @}
- */
-
-/* register this as object request broker structure */
-ORB_DECLARE(vehicle_bodyframe_speed_setpoint);
-
-#endif
+__END_DECLS

@@ -57,6 +57,7 @@ struct actuator_armed_s {
 #endif
 	uint64_t timestamp;
 	bool armed;
+	bool prearmed;
 	bool ready_to_arm;
 	bool lockdown;
 	bool force_failsafe;
