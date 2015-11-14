@@ -13,17 +13,25 @@
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
+#include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_status.h>
 
 __EXPORT int ex_hwtest_main(int argc, char *argv[]);
 
 int ex_hwtest_main(int argc, char *argv[]) {
    bool test_pwm = false;
    bool test_att = false;
+   bool test_fm = false;
    char test_att_flags = 0x00;
 
    // Check arguments for syntax
-   if(argc == 2 && strcmp(argv[1], "--att") == 0) {
-      test_att = true;
+   if(argc == 2) {
+      if(strcmp(argv[1], "--att") == 0) {
+         test_att = true;
+      }
+      else if(strcmp(argv[1], "--fm") == 0) {
+         test_fm = true;
+      }
    }
    else if(argc > 2 && strcmp(argv[1], "--pwm") == 0) {
       test_pwm = true;
@@ -53,6 +61,7 @@ int ex_hwtest_main(int argc, char *argv[]) {
    else {
       warnx("Usage: ex_hwtest --<argument>");
       warnx("\t--pwm -<r,p,y,t> (test motor control)");
+      warnx("\t--fm (test fm)");
       warnx("\t--att (test attitude sensors)");
       return 0;
    }
@@ -79,7 +88,7 @@ int ex_hwtest_main(int argc, char *argv[]) {
 
       // Indicate that we'll be publishing arming information for the motors
       orb_advert_t arm_pub_fd = orb_advertise(ORB_ID(actuator_armed), &arm);
-
+      
       // Arm the motors
       arm.timestamp = hrt_absolute_time();
       arm.ready_to_arm = true;
@@ -126,7 +135,7 @@ int ex_hwtest_main(int argc, char *argv[]) {
       // Incrementally increase output to the motors every 5 seconds
       while(count <= 45) {
          stime = hrt_absolute_time();
-
+         
          if(test != 3)
             actuators.control[3] = 0.5f;
 
@@ -159,9 +168,7 @@ int ex_hwtest_main(int argc, char *argv[]) {
             // Publish the control information
             actuators.timestamp = hrt_absolute_time();
             orb_publish(ORB_ID(actuator_controls_0), actuator_pub_fd, &actuators);
-            
-            // Pass control for 10ms
-            usleep(10000);
+            usleep(500);
          }
 
          warnx("count %i", count);
@@ -214,6 +221,60 @@ int ex_hwtest_main(int argc, char *argv[]) {
             }
          }
       }
+   }
+
+   else if(test_fm) {
+      uint8_t main_mode = 0;
+      uint8_t sub_mode = 0;
+      uint32_t custom_mode = 0;
+
+      struct vehicle_status_s vstatus;
+      memset(&vstatus, 0, sizeof(vstatus));
+      
+      int vstatus_sub_fd = orb_subscribe(ORB_ID(vehicle_status));
+
+      struct vehicle_command_s vcmd;
+      memset(&vcmd, 0, sizeof(vcmd));
+
+      orb_advert_t vcmd_pub_fd = 
+       orb_advertise(ORB_ID(vehicle_command), &vcmd);
+
+      struct actuator_armed_s arm;
+      memset(&arm, 0, sizeof(arm));
+
+      orb_advert_t arm_pub_fd = orb_advertise(ORB_ID(actuator_armed), &arm);
+      
+      arm.timestamp = hrt_absolute_time();
+      arm.ready_to_arm = true;
+      arm.armed = true;
+
+      // Publish the arming information, indicating new data is available
+      orb_publish(ORB_ID(actuator_armed), arm_pub_fd, &arm);
+
+      orb_copy(ORB_ID(vehicle_status), vstatus_sub_fd, &vstatus);
+      printf("vehicle information\n");
+      printf("\tmain state: %d\n", vstatus.main_state);
+      printf("\tnav state: %d\n", vstatus.nav_state);
+      printf("\tarming state: %d\n", vstatus.arming_state);
+
+      main_mode = 1;
+      sub_mode = 2;
+
+      custom_mode = (main_mode << 8) | (sub_mode);
+
+      vcmd.param2 = custom_mode;
+      vcmd.command = VEHICLE_CMD_DO_SET_MODE;
+
+      orb_publish(ORB_ID(vehicle_command), vcmd_pub_fd, &vcmd);
+
+      usleep(1000);
+     
+      orb_copy(ORB_ID(vehicle_status), vstatus_sub_fd, &vstatus);
+      printf("vehicle information\n");
+      printf("\tmain state: %d\n", vstatus.main_state);
+      printf("\tnav state: %d\n", vstatus.nav_state);
+      printf("\tarming state: %d\n", vstatus.arming_state);
+
    }
 
    return 0;

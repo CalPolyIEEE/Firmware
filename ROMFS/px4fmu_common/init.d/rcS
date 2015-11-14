@@ -115,9 +115,9 @@ then
 	set MIXER_AUX none
 	set OUTPUT_MODE fmu
 	set PWM_OUT 1234
-	set PWM_RATE 400
+	set PWM_RATE 50
 	set PWM_DISARMED 900
-	set PWM_MIN 1075
+	set PWM_MIN 1200
 	set PWM_MAX 2000
 	set PWM_AUX_OUT none
 	set PWM_AUX_RATE none

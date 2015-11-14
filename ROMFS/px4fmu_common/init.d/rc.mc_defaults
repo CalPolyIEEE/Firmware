@@ -48,7 +48,7 @@ then
 	param set RTL_DESCEND_ALT 10.0
 fi
 
-set PWM_RATE 400
+set PWM_RATE 50
 set PWM_DISARMED 900
-set PWM_MIN 1075
+set PWM_MIN 1200
 set PWM_MAX 2000
