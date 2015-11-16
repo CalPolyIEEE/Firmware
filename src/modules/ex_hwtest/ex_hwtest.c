@@ -19,6 +19,7 @@
 __EXPORT int ex_hwtest_main(int argc, char *argv[]);
 
 int ex_hwtest_main(int argc, char *argv[]) {
+   bool check_status = false;
    bool test_pwm = false;
    bool test_att = false;
    bool test_fm = false;
@@ -32,28 +33,33 @@ int ex_hwtest_main(int argc, char *argv[]) {
       else if(strcmp(argv[1], "--fm") == 0) {
          test_fm = true;
       }
+      else if(strcmp(argv[1], "--status") == 0) {
+         check_status = true;
+      }
    }
-   else if(argc > 2 && strcmp(argv[1], "--pwm") == 0) {
-      test_pwm = true;
+   else if(argc > 2) {
+      if(strcmp(argv[1], "--pwm") == 0) {
+         test_pwm = true;
 
-      for(int i = 2; i < argc; i++) {
-         for(unsigned int j = 0; j < strlen(argv[i]); j++) {
-            switch(argv[i][j]) {
-               case 'r':
-                  test_att_flags |= 0x01;
-                  break;
-               case 'p':
-                  test_att_flags |= 0x02;
-                  break;
-               case 'y':
-                  test_att_flags |= 0x04;
-                  break;
-               case 't':
-                  test_att_flags |= 0x08;
-                  break;
-               case '-':
-               default:
-                  break;
+         for(int i = 2; i < argc; i++) {
+            for(unsigned int j = 0; j < strlen(argv[i]); j++) {
+               switch(argv[i][j]) {
+                  case 'r':
+                     test_att_flags |= 0x01;
+                     break;
+                  case 'p':
+                     test_att_flags |= 0x02;
+                     break;
+                  case 'y':
+                     test_att_flags |= 0x04;
+                     break;
+                  case 't':
+                     test_att_flags |= 0x08;
+                     break;
+                  case '-':
+                  default:
+                     break;
+               }
             }
          }
       }
@@ -223,7 +229,7 @@ int ex_hwtest_main(int argc, char *argv[]) {
       }
    }
 
-   else if(test_fm) {
+   else if(test_fm || check_status) {
       uint8_t main_mode = 0;
       uint8_t sub_mode = 0;
       uint32_t custom_mode = 0;
@@ -239,23 +245,39 @@ int ex_hwtest_main(int argc, char *argv[]) {
       orb_advert_t vcmd_pub_fd = 
        orb_advertise(ORB_ID(vehicle_command), &vcmd);
 
-      struct actuator_armed_s arm;
-      memset(&arm, 0, sizeof(arm));
+      /* Don't arm if we're just checking the vehicle status */
+      if(test_fm) {
+         struct actuator_armed_s arm;
+         memset(&arm, 0, sizeof(arm));
 
-      orb_advert_t arm_pub_fd = orb_advertise(ORB_ID(actuator_armed), &arm);
+         orb_advert_t arm_pub_fd = orb_advertise(ORB_ID(actuator_armed), &arm);
       
-      arm.timestamp = hrt_absolute_time();
-      arm.ready_to_arm = true;
-      arm.armed = true;
+         arm.timestamp = hrt_absolute_time();
+         arm.ready_to_arm = true;
+         arm.armed = true;
 
-      // Publish the arming information, indicating new data is available
-      orb_publish(ORB_ID(actuator_armed), arm_pub_fd, &arm);
+         /* Publish the arming information, indicating new data is available */
+         orb_publish(ORB_ID(actuator_armed), arm_pub_fd, &arm);
+      }
 
       orb_copy(ORB_ID(vehicle_status), vstatus_sub_fd, &vstatus);
-      printf("vehicle information\n");
+      printf("VEHICLE INFORMATION\n");
       printf("\tmain state: %d\n", vstatus.main_state);
       printf("\tnav state: %d\n", vstatus.nav_state);
       printf("\tarming state: %d\n", vstatus.arming_state);
+      printf("\thil state: %d\n", vstatus.hil_state);
+
+      if(check_status) {
+         printf("VEHICLE CONDITION\n");
+         printf("\tValid voltage: %s\n",
+          vstatus.condition_battery_voltage_valid ? "yes" : "no");
+         printf("\tSensors initialized: %s\n", 
+          vstatus.condition_system_sensors_initialized ? "yes" : "no");
+         printf("\tPosition valid: %s\n",
+          vstatus.condition_global_position_valid ? "yes" : "no" );
+         printf("\tHome valid: %s\n",
+          vstatus.condition_home_position_valid ? "yes" : "no" );
+      }
 
       main_mode = 1;
       sub_mode = 2;

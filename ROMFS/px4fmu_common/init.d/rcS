@@ -120,7 +120,7 @@ then
 	set OUTPUT_MODE fmu
 	set PWM_OUT 1234
 	set PWM_RATE 400
-	set PWM_DISARMED 0
+	set PWM_DISARMED 900
 	set PWM_MIN 1025
 	set PWM_MAX 1975
 	set PWM_AUX_OUT none
