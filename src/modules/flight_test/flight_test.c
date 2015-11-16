@@ -5,7 +5,7 @@
 #include <math.h>
 #include <nuttx/config.h>
 #include <poll.h>
-#include <px4_config.h>
+//#include <px4_config.h>
 #include <stdio.h>
 #include <string.h>
 #include <systemlib/err.h>
@@ -30,26 +30,73 @@ __EXPORT int flight_test_main(int argc, char *argv[]);
 /* Daemon main loop */
 int flight_test_thread_main(int argc, char *argv[]);
 
-static void usage(const char *reason);
+static void usage(const char *reason) {
+   if(reason) {
+      warnx("%s\n", reason);
+   }
 
-void control_attitude(const struct vehicle_attitude_setpoint_s *att_sp,
- const struct vehicle_attitude_s *att,
- struct vehicle_rates_setpoint_s *rates_sp,
- struct actuator_constrols_s *actuators);
-
-void control_heading(const struct vehicle_global_position_s *pos,
- const struct position_setpoint_s *sp,
- const struct vehicle_attitude_s *att,
- struct vehicle_attitude_setpoint_s *att_sp);
+   warnx("usage: flight_test {start|stop|status}\n\n");
+}
 
 static bool thread_should_exit = false;
 static bool thread_running = false;
 static int daemon_task;
+/*
 static struct params p;
 static struct param_handles ph;
+*/
+int flight_test_main(int argc, char *argv[]) {
 
-void control attitude(const struct vehicle_attitude_setpoint_s *att_sp,
- const struct vehicle_attitude_s *att,
- struct vehicle_rates_setpoint_s *rates_sp,
- struct actuato_controls_s *actuators) {
+   if(argc < 2) {
+      usage("missing command");
+      return 1;
+   }
+   else if(!strcmp(argv[1], "start")) {
+      if(thread_running) {
+         warnx("app is already running\n");
+         return 0;
+      }
+      thread_should_exit = false;
+      /*
+      daemon_task = task_spawn_cmd("daemon", SCHED_RR, SCHED_PRIORITY_DEFAULT,
+       4096, flight_test_thread_main, 
+       (argv) ? (const char **)&argv[2] : (const char **)NULL);
+      */
+      daemon_task = task_spawn_cmd("daemon", SCHED_RR, SCHED_PRIORITY_DEFAULT,
+       4096, flight_test_thread_main, NULL);
 
+      thread_running = true;
+      return 0;
+   }
+   else if(!strcmp(argv[1], "stop")) {
+      thread_should_exit = true;
+      return 0;
+   }
+   else if(!strcmp(argv[1], "status")) {
+      if(thread_running) {
+         warnx("running\n");
+      }
+      else {
+         warnx("not started\n");
+      }
+
+      return 0;
+   }
+
+   usage("unrecognized command");
+   return 1;
+}
+
+int flight_test_thread_main(int argc, char *argv[]) {
+   warnx("flight_test starting\n");
+
+   while(!thread_should_exit) {
+      sleep(10000);
+   }
+   
+   warnx("flight_test stopping\n");
+
+   thread_running = false;
+   
+   return 0;
+}
