@@ -33,14 +33,6 @@ __EXPORT int flight_test_main(int argc, char *argv[]);
 /* Daemon main loop */
 int flight_test_thread_main(int argc, char *argv[]);
 
-static void usage(const char *reason) {
-   if(reason) {
-      warnx("%s\n", reason);
-   }
-
-   warnx("usage: flight_test {start|stop|status}");
-}
-
 static bool thread_should_exit = false;
 static bool thread_running = false;
 static int daemon_task;
@@ -51,7 +43,8 @@ static struct param_handles ph;
 int flight_test_main(int argc, char *argv[]) {
 
    if(argc < 2) {
-      usage("missing command");
+      warnx("missing command");
+      warnx("usage: flight_test {start|stop|status}");
    }
 
    else if(!strcmp(argv[1], "start")) {
@@ -80,6 +73,7 @@ int flight_test_main(int argc, char *argv[]) {
 
       exit(!(i < max_wait_steps));
    }
+
    else if(!strcmp(argv[1], "stop")) {
       if(!thread_running)
          errx(0, "already stopped");
@@ -94,6 +88,7 @@ int flight_test_main(int argc, char *argv[]) {
       warnx("stopped");
       exit(0);
    }
+
    else if(!strcmp(argv[1], "status")) {
       if(thread_running) {
          warnx("running");
@@ -105,7 +100,10 @@ int flight_test_main(int argc, char *argv[]) {
       exit(0);
    }
 
-   usage("unrecognized command");
+   else {
+      usage("unrecognized command");
+   }
+
    return 1;
 }
 
