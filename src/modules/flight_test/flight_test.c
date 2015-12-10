@@ -106,7 +106,6 @@ int flight_test_main(int argc, char *argv[]) {
 int flight_test_thread_main(int argc, char *argv[]) {
    
    thread_running = true;
-   
    warnx("flight_test starting");
 
    struct vehicle_status_s vstatus;
@@ -114,6 +113,9 @@ int flight_test_thread_main(int argc, char *argv[]) {
    struct actuator_controls_s actuators;
    struct actuator_armed_s arm;
    memset(&vstatus, 0, sizeof(vstatus));
+   memset(&att, 0, sizeof(att));
+   memset(&actuators, 0, sizeof(actuators));
+   memset(&arm, 0, sizeof(arm));
 
    int arm_sub_fd = orb_subscribe(ORB_ID(actuator_armed));
    int att_sub_fd = orb_subscribe(ORB_ID(vehicle_attitude));
@@ -124,11 +126,18 @@ int flight_test_thread_main(int argc, char *argv[]) {
       { .fd = att_sub_fd, .events = POLLIN}
       { .fd = vstatus_sub_fd, .events = POLLIN}
    };
+   int ret;
+
+   orb_copy(ORB_ID(vehicle_status), vstatus_sub_fd, &vstatus);
 
    while(!thread_should_exit) {
-   
+      ret = poll(fds, 1, 500);
 
-      usleep(10000);
+      if(ret && (fds[2].revents & POLLIN)) {
+         warnx("New vehicle status information");
+         printf("\tmain state: %d\n", vstatus.main_state);
+         printf("\tnav state: %d\n", vstatus.nav_state);
+      }
    }
 
    thread_running = false;
