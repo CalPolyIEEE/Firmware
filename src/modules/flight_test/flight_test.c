@@ -32,15 +32,6 @@ __EXPORT int flight_test_main(int argc, char *argv[]);
 
 /* Daemon main loop */
 int flight_test_thread_main(int argc, char *argv[]);
-
-static void usage(const char *reason) {
-   if(reason) {
-      warnx("%s\n", reason);
-   }
-
-   warnx("usage: flight_test {start|stop|status}");
-}
-
 static bool thread_should_exit = false;
 static bool thread_running = false;
 static int daemon_task;
@@ -51,7 +42,8 @@ static struct param_handles ph;
 int flight_test_main(int argc, char *argv[]) {
 
    if(argc < 2) {
-      usage("missing command");
+      warnx("missing command");
+      warnx("usage: flight_test {start|stop|status}");
    }
 
    else if(!strcmp(argv[1], "start")) {
@@ -104,8 +96,10 @@ int flight_test_main(int argc, char *argv[]) {
 
       exit(0);
    }
+   else {
+      warnx("unrecognized command");
+   }
 
-   usage("unrecognized command");
    return 1;
 }
 
@@ -115,7 +109,25 @@ int flight_test_thread_main(int argc, char *argv[]) {
    
    warnx("flight_test starting");
 
+   struct vehicle_status_s vstatus;
+   struct vehicle_attitude_s att;
+   struct actuator_controls_s actuators;
+   struct actuator_armed_s arm;
+   memset(&vstatus, 0, sizeof(vstatus));
+
+   int arm_sub_fd = orb_subscribe(ORB_ID(actuator_armed));
+   int att_sub_fd = orb_subscribe(ORB_ID(vehicle_attitude));
+   int vstatus_sub_fd = orb_subscribe(ORB_ID(vehicle_status));
+
+   struct pollfd fds[3] = {
+      { .fd = arm_sub_fd, .events = POLLIN}
+      { .fd = att_sub_fd, .events = POLLIN}
+      { .fd = vstatus_sub_fd, .events = POLLIN}
+   };
+
    while(!thread_should_exit) {
+   
+
       usleep(10000);
    }
 
