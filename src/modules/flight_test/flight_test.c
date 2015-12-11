@@ -122,10 +122,11 @@ int flight_test_thread_main(int argc, char *argv[]) {
    int att_sub_fd = orb_subscribe(ORB_ID(vehicle_attitude));
    int vstatus_sub_fd = orb_subscribe(ORB_ID(vehicle_status));
 
-   struct pollfd fds[3] = {
-      { .fd = arm_sub_fd, .events = POLLIN}
-      { .fd = att_sub_fd, .events = POLLIN}
-      { .fd = vstatus_sub_fd, .events = POLLIN}
+   struct pollfd fds[3] =
+   {
+      { .fd = arm_sub_fd, .events = POLLIN },
+      { .fd = att_sub_fd, .events = POLLIN  },
+      { .fd = vstatus_sub_fd, .events = POLLIN }
    };
    int ret;
 
