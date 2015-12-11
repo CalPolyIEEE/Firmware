@@ -112,9 +112,9 @@ int flight_test_thread_main(int argc, char *argv[]) {
    struct vehicle_attitude_s att;
    struct actuator_controls_s actuators;
    struct actuator_armed_s arm;
-   memset(&vstatus, 0, sizeof(vstatus));
-   memset(&att, 0, sizeof(att));
-   memset(&actuators, 0, sizeof(actuators));
+   memset(&vstatus, 0, sizeof(struct vehicle_status_s));
+   memset(&att, 0, sizeof(struct vehicle_attitude_s));
+   memset(&actuators, 0, sizeof(struct actuator_controls_s));
    memset(&arm, 0, sizeof(arm));
 
    int arm_sub_fd = orb_subscribe(ORB_ID(actuator_armed));
@@ -135,8 +135,8 @@ int flight_test_thread_main(int argc, char *argv[]) {
 
       if(ret && (fds[2].revents & POLLIN)) {
          warnx("New vehicle status information");
-         printf("\tmain state: %d\n", vstatus.main_state);
-         printf("\tnav state: %d\n", vstatus.nav_state);
+         warnx("\tmain state: %d\n", vstatus.main_state);
+         warnx("\tnav state: %d\n", vstatus.nav_state);
       }
    }
 
