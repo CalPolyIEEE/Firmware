@@ -104,7 +104,8 @@ int flight_test_main(int argc, char *argv[]) {
    return 1;
 }
 
-int flight_test_thread_main(int argc, char *argv[]) {
+int flight_test_thread_main(int argc, char *argv[])
+{
    
    thread_running = true;
    warnx("flight_test starting");
@@ -132,10 +133,13 @@ int flight_test_thread_main(int argc, char *argv[]) {
 
    orb_copy(ORB_ID(vehicle_status), vstatus_sub_fd, &vstatus);
 
-   while(!thread_should_exit) {
+   while(!thread_should_exit)
+   {
+      usleep(100)
       ret = poll(fds, 1, 500);
 
-      if(ret && (fds[2].revents & POLLIN)) {
+      if(ret && (fds[2].revents & POLLIN))
+      {
          warnx("New vehicle status information");
          warnx("\tmain state: %d\n", vstatus.main_state);
          warnx("\tnav state: %d\n", vstatus.nav_state);
