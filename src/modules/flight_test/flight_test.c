@@ -130,12 +130,14 @@ int flight_test_thread_main(int argc, char *argv[])
       { .fd = vstatus_sub_fd, .events = POLLIN }
    };
    int ret;
+   int j = 0;
 
    orb_copy(ORB_ID(vehicle_status), vstatus_sub_fd, &vstatus);
 
    while(!thread_should_exit)
    {
-      usleep(100);
+      usleep(100)
+      warnx("Time count: %d", j);
       ret = poll(fds, 1, 500);
 
       if(ret && (fds[2].revents & POLLIN))
@@ -144,6 +146,7 @@ int flight_test_thread_main(int argc, char *argv[])
          warnx("\tmain state: %d\n", vstatus.main_state);
          warnx("\tnav state: %d\n", vstatus.nav_state);
       }
+      j++;
    }
 
    thread_running = false;
