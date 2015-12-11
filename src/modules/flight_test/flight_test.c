@@ -101,7 +101,7 @@ int flight_test_main(int argc, char *argv[]) {
    }
 
    else {
-      usage("unrecognized command");
+      warnx("unrecognized command");
    }
 
    return 1;
