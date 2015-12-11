@@ -41,6 +41,7 @@ tags
 *.orig
 src/platforms/nuttx/px4_messages/*
 src/platforms/ros/px4_messages/*
+src/modules/uORB/topics/*
 Firmware.zip
 unittests/build
 *.generated.h
@@ -48,3 +49,4 @@ unittests/build
 *.pretty
 xcode
 ROMFS/*/*/rc.autostart
+
