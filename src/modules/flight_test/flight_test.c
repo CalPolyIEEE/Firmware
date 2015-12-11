@@ -135,7 +135,7 @@ int flight_test_thread_main(int argc, char *argv[])
 
    while(!thread_should_exit)
    {
-      usleep(100)
+      usleep(100);
       ret = poll(fds, 1, 500);
 
       if(ret && (fds[2].revents & POLLIN))
